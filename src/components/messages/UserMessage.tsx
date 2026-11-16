@@ -2,13 +2,25 @@ import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
-import { IconCloseFill14, IconEditOutline16 } from '../base/icons.js'
+import { IconCloseFill14, IconEditOutline16, IconPaperclipOutline16 } from '../base/icons.js'
 import { editMessage, retryUpload } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type {
   FileAttachment,
   UserMessage as UserMessageType,
 } from '../../services/chat/types.js'
+import {
+  ACCEPT,
+  cancelUpload,
+  isImage,
+  resolveMimeType,
+  uploadAttachment,
+  validateFiles,
+} from '../../services/attachments.js'
+import { deleteFiles, saveFiles } from '../../services/chat/db.js'
+import { useSettings } from '../../services/settings.js'
+import { createId } from '../../utils/id.js'
+import { showToast } from '../base/toastState.js'
 import { Button } from '../base/Button.js'
 import { IconButton } from '../base/IconButton.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
@@ -47,9 +59,14 @@ export const UserMessage = memo(function UserMessage({
   // 编辑时单独维护附件列表，移除只影响这次重新提问
   const [editFiles, setEditFiles] = useState<FileAttachment[]>(message.files)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  // 本次编辑新加、已写入 IndexedDB 的附件；撤掉或取消时连带删除原件
+  const addedFileIds = useRef<string[]>([])
   const isMobile = useIsMobile()
   const files = editing ? editFiles : message.files
-  const canSend = !busy && (draft.trim() !== '' || files.length > 0)
+  // 新加的附件要等上传拿到 serverId 才能发送，与输入框规则一致
+  const uploading = editing && editFiles.some((file) => !file.serverId)
+  const canSend = !busy && !uploading && (draft.trim() !== '' || files.length > 0)
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current
@@ -61,9 +78,68 @@ export const UserMessage = memo(function UserMessage({
 
   const sendEdit = () => {
     if (canSend && ensureApiKey() && editMessage(sessionId, message.id, draft.trim(), editFiles)) {
+      addedFileIds.current = []
       stopReadAloud()
       setEditing(false)
     }
+  }
+
+  /** 删掉本次新加的原件；原消息已存在的附件不动，旧版本仍在引用 */
+  const dropAddedFiles = (ids: string[]) => {
+    if (ids.length === 0) {
+      return
+    }
+    addedFileIds.current = addedFileIds.current.filter((id) => !ids.includes(id))
+    void deleteFiles(ids).catch(() => undefined)
+  }
+
+  const cancelEdit = () => {
+    for (const id of addedFileIds.current) {
+      cancelUpload(id)
+    }
+    dropAddedFiles([...addedFileIds.current])
+    setEditFiles(message.files)
+    setEditing(false)
+  }
+
+  const addFiles = async (picked: File[]) => {
+    if (picked.length === 0 || !ensureApiKey()) {
+      return
+    }
+    const error = validateFiles(picked, editFiles.length)
+    if (error) {
+      showToast(error)
+      return
+    }
+    const added = picked.map((file) => ({
+      id: createId(),
+      serverId: null,
+      name: file.name,
+      size: file.size,
+      isImage: isImage(resolveMimeType(file)),
+      mimeType: resolveMimeType(file),
+    }))
+    // 先落库再进列表，缩略图靠 IndexedDB 里的原件渲染
+    await saveFiles(added.map((file, index) => ({ id: file.id, blob: picked[index] })))
+    addedFileIds.current.push(...added.map((file) => file.id))
+    setEditFiles((list) => [...list, ...added])
+    const apiKey = useSettings.getState().apiKey ?? ''
+    added.forEach((item, index) => {
+      const picked0 = picked[index]
+      void uploadAttachment(apiKey, item.id, picked0, item.name, item.isImage)
+        .then((serverId) =>
+          setEditFiles((list) =>
+            list.map((file) => (file.id === item.id ? { ...file, serverId } : file))
+          )
+        )
+        .catch(() => undefined)
+    })
+  }
+
+  const removeFile = (id: string) => {
+    cancelUpload(id)
+    dropAddedFiles([id])
+    setEditFiles((list) => list.filter((file) => file.id !== id))
   }
 
   return (
@@ -86,9 +162,7 @@ export const UserMessage = memo(function UserMessage({
                   type="button"
                   className={styles.fileRemove}
                   aria-label={t('removeAttachment')}
-                  onClick={() =>
-                    setEditFiles((list) => list.filter((item) => item.id !== file.id))
-                  }
+                  onClick={() => removeFile(file.id)}
                 >
                   <IconCloseFill14 />
                 </button>
@@ -113,7 +187,7 @@ export const UserMessage = memo(function UserMessage({
                 return
               }
               if (event.key === 'Escape') {
-                setEditing(false)
+                cancelEdit()
               } else if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !isMobile) {
                 event.preventDefault()
                 sendEdit()
@@ -121,7 +195,24 @@ export const UserMessage = memo(function UserMessage({
             }}
           />
           <div className={styles.editorActions}>
-            <Button size="s" variant="outlined" onClick={() => setEditing(false)}>
+            <IconButton
+              icon={<IconPaperclipOutline16 />}
+              tooltip={t('uploadFile')}
+              disabled={busy}
+              onClick={() => ensureApiKey() && fileInputRef.current?.click()}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              accept={ACCEPT}
+              onChange={(event) => {
+                void addFiles(Array.from(event.target.files ?? []))
+                event.target.value = ''
+              }}
+            />
+            <Button size="s" variant="outlined" onClick={cancelEdit}>
               {t('cancel')}
             </Button>
             <Button size="s" disabled={!canSend} onClick={sendEdit}>
@@ -143,6 +234,7 @@ export const UserMessage = memo(function UserMessage({
                 onClick={() => {
                   setDraft(message.content)
                   setEditFiles(message.files)
+                  addedFileIds.current = []
                   setEditing(true)
                 }}
               />
