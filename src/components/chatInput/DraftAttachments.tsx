@@ -80,7 +80,7 @@ const AttachmentItem = ({
       <button
         type="button"
         className={clsx(styles.remove, failed && !retry && styles.invalidRemove)}
-        aria-label={t('delete')}
+        aria-label={t('removeAttachment')}
         onClick={onRemove}
       >
         <IconCloseFill14 />

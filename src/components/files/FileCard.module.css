@@ -12,10 +12,6 @@
   background-color: var(--dsw-specific-input-major);
   cursor: default;
   transition: background-color 0.2s ease-in-out;
-
-  &:hover .remove {
-    opacity: 1;
-  }
 }
 
 .clickable {
@@ -27,7 +23,7 @@
 }
 
 .editable {
-  padding-right: 24px;
+  padding-right: 26px;
 }
 
 .failed {
@@ -97,22 +93,23 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* 与输入框内的图片缩略图一致：常显，触摸设备也能点得到 */
 .remove {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 3px;
+  right: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
   border-radius: 50%;
   color: var(--dsw-alias-label-primary-inverted);
   background-color: var(--dsw-alias-button-contrast-fill);
   cursor: pointer;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.2s ease-in-out;
 }
 

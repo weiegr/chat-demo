@@ -17,6 +17,7 @@ export const zh = {
   deleteSessionWithFilesDescription: '删除后，该对话及其中上传的文件将不可恢复。确认删除吗？',
   cancel: '取消',
   delete: '删除',
+  removeAttachment: '移除附件',
   sessionItemMenuRenameOption: '重命名',
   more: '更多',
   close: '关闭',

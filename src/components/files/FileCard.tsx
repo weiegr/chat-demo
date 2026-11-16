@@ -69,7 +69,7 @@ export const FileCard = ({
         <button
           type="button"
           className={clsx(styles.remove, status === 'error' && !onRetry && styles.invalidRemove)}
-          aria-label={t('delete')}
+          aria-label={t('removeAttachment')}
           onClick={(event) => {
             event.stopPropagation()
             onRemove()
