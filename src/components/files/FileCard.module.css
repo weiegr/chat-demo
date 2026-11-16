@@ -23,7 +23,7 @@
 }
 
 .editable {
-  padding-right: 26px;
+  padding-right: 28px;
 }
 
 .failed {
@@ -96,8 +96,8 @@
 /* 与输入框内的图片缩略图一致：常显，触摸设备也能点得到 */
 .remove {
   position: absolute;
-  top: 3px;
-  right: 3px;
+  top: 5px;
+  right: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,9 +108,21 @@
   border-radius: 50%;
   color: var(--dsw-alias-label-primary-inverted);
   background-color: var(--dsw-alias-button-contrast-fill);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
   cursor: pointer;
   opacity: 1;
-  transition: opacity 0.2s ease-in-out;
+  transition:
+    opacity 0.2s ease-in-out,
+    transform 0.2s ease-in-out;
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  &:active {
+    transform: scale(0.92);
+  }
 }
 
 .invalidRemove {
