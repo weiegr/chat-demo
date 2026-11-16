@@ -27,6 +27,14 @@ pnpm build
 
 The output is written to `dist/`. Deploy it to a static web server or open `dist/index.html` directly. Opening the file directly requires browser support for storage on `file://` pages and an API service that permits their cross-origin requests.
 
+To ship one self-contained HTML file (for example, to open on a phone from a file manager):
+
+```sh
+pnpm build:single
+```
+
+The result is `dist-single/index.html` (about 4.5 MB) with scripts, styles, and fonts inlined, so it needs no sibling directories. Android file managers open local files through `content://` URIs, where relative asset paths cannot resolve; this build is the way around it. Whether `localStorage` and IndexedDB work under `content://` depends on the browser; when they are blocked, the app falls back to in-memory storage for the current session.
+
 ## Features
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.
@@ -45,15 +53,16 @@ Settings → Data → Delete all chats clears all local conversations, original 
 
 ## Development
 
-| Command       | Description                  |
-| ------------- | ---------------------------- |
-| `pnpm dev`    | Start the development server |
-| `pnpm build`  | Build into `dist/`           |
-| `pnpm type`   | Run TypeScript type checks   |
-| `pnpm lint`   | Lint with oxlint             |
-| `pnpm format` | Format with oxfmt            |
+| Command             | Description                    |
+| ------------------- | ------------------------------ |
+| `pnpm dev`          | Start the development server   |
+| `pnpm build`        | Build into `dist/`             |
+| `pnpm build:single` | Build one file into `dist-single/` |
+| `pnpm type`         | Run TypeScript type checks     |
+| `pnpm lint`         | Lint with oxlint               |
+| `pnpm format`       | Format with oxfmt              |
 
-[rspack.config.ts](rspack.config.ts) uses `https://api.deepseek.com` by default. Use `createConfig({ apiOrigin, devServer })` to customize the API origin and development server proxy.
+[rspack.config.ts](rspack.config.ts) uses `https://api.deepseek.com` by default. Use `createConfig({ apiOrigin, devServer, singleFile })` to customize the API origin, the development server proxy, and the single-file output.
 
 Chat uses `deepseek-flash` by default through Anthropic-compatible Messages / Files APIs. Speech features use ASR / TTS endpoints. Requests include extensions for search, link reading, titles, and `latest_reminder`, so the configured service must support the corresponding capabilities. Supported attachment formats are determined by server-side validation.
 

@@ -10,6 +10,7 @@ export const zh = {
   sessionLoadFailed: '对话加载失败，请重试',
   sessionSaveFailed: '对话或附件尚未保存到本机，关闭页面可能丢失，请重试',
   sessionDeleteFailed: '删除对话失败，请重试',
+  storageEphemeral: '当前打开方式不允许本地存储，对话在关闭页面后不会保留',
   settings: '设置',
   appName: 'API 使用 demo',
   deleteSessionModalContentTitle: '永久删除对话',

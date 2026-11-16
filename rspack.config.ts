@@ -21,17 +21,20 @@ type ConfigOptions = {
   apiOrigin?: string
   /** 开发服务器配置，支持本地接口代理 */
   devServer?: Configuration['devServer']
+  /** 产出可离线单文件：合并全部异步 chunk 并内联脚本、样式、字体，供 file://、content:// 直接打开 */
+  singleFile?: boolean
 }
 
 /** 创建构建配置，支持自定义 API 地址和开发服务器选项 */
 export const createConfig = ({
   apiOrigin = 'https://api.deepseek.com',
   devServer,
+  singleFile = false,
 }: ConfigOptions = {}): Configuration => ({
   mode: dev ? 'development' : 'production',
   entry: './src/main.tsx',
   output: {
-    path: path.resolve(root, 'dist'),
+    path: path.resolve(root, singleFile ? 'dist-single' : 'dist'),
     // 运行时按当前脚本地址推导资源路径，file:// 下异步 chunk、字体都按相对位置加载
     publicPath: 'auto',
     filename: 'static/js/[name].[contenthash:8].js',
@@ -70,10 +73,13 @@ export const createConfig = ({
         },
         type: 'javascript/auto',
       },
-      { test: /\.(woff2?|ttf)$/, type: 'asset/resource' },
+      // 单文件模式下字体直接转成 data URI，避免再依赖相邻的 media 目录
+      { test: /\.(woff2?|ttf)$/, type: singleFile ? 'asset/inline' : 'asset/resource' },
     ],
   },
   plugins: [
+    // 单文件模式把动态 import 的 chunk 全部并进入口，运行时不再发起资源请求
+    ...(singleFile ? [new rspack.optimize.LimitChunkCountPlugin({ maxChunks: 1 })] : []),
     // 经典 defer 脚本支持 file:// 页面的资源加载
     new rspack.HtmlRspackPlugin({
       template: './src/index.html',
@@ -90,4 +96,4 @@ export const createConfig = ({
 })
 
 // eslint-disable-next-line import/no-default-export
-export default defineConfig(createConfig())
+export default defineConfig(createConfig({ singleFile: process.env.SINGLE_FILE === '1' }))

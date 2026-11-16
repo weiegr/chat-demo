@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslate } from '../i18n/index.js'
 import { useSettings } from '../services/settings.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
@@ -18,6 +18,7 @@ import { ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
+import { isEphemeralStorage } from '../services/chat/db.js'
 import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '../components/base/Button.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
@@ -72,6 +73,16 @@ export const App = () => {
     // 首次打开先在设置里输入 API Key
     ensureApiKey()
   }, [])
+
+  // 不透明来源（content:// 等）下存储不可用，只在此次会话内有效，打开时说明一次
+  const ephemeralNoticeShown = useRef(false)
+  useEffect(() => {
+    if (!isEphemeralStorage || ephemeralNoticeShown.current) {
+      return
+    }
+    ephemeralNoticeShown.current = true
+    showToast(t('storageEphemeral'))
+  }, [t])
 
   return (
     <>

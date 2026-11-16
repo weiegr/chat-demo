@@ -1,8 +1,31 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import { createMemoryDB } from './memoryDB.js'
 import { toSessionSummary, type Session, type SessionSummary } from './types.js'
 
 /** IndexedDB 存储结构版本；新增或调整存储、索引时递增。 */
 const DB_VERSION = 11
+
+/** 内存库与真实库保持同一组存储名 */
+const STORE_NAMES = [
+  'sessions',
+  'sessionSummaries',
+  'files',
+  'sessionsStaging',
+  'filesStaging',
+] as const
+
+/**
+ * 当前来源是否禁止本地存储。`content://`（Android 文件管理器打开本地 HTML）等不透明来源
+ * 访问 localStorage 会抛 SecurityError，IndexedDB 同样不可用，只能退化成内存存储。
+ */
+export const isEphemeralStorage = (() => {
+  try {
+    localStorage.getItem('chat-demo:storage-probe')
+    return typeof indexedDB === 'undefined'
+  } catch {
+    return true
+  }
+})()
 
 /** 文件原件按附件的本地 id 存储，所有引用同一 id 的消息共用一份；用于缩略图、打开查看，以及没有 serverId 时补传。 */
 export type StoredFile = {
@@ -52,9 +75,17 @@ const abortTransaction = (tx: { abort(): void }) => {
   }
 }
 
-// 每个操作拿到连接后立即创建事务；IndexedDB 按创建顺序执行范围重叠的事务，读取总能看到之前发起的写入。
-const getDB = () =>
-  (dbPromise ??= openDB<ChatDB>('chat-demo', DB_VERSION, {
+/** 权限类失败说明当前来源不允许本地存储，退回内存库；其他错误交给界面重试。 */
+const isStorageDenied = (error: unknown) =>
+  typeof DOMException !== 'undefined' &&
+  error instanceof DOMException &&
+  (error.name === 'SecurityError' || error.name === 'InvalidStateError')
+
+const openDatabase = (): Promise<IDBPDatabase<ChatDB>> => {
+  if (isEphemeralStorage) {
+    return Promise.resolve(createMemoryDB(STORE_NAMES) as unknown as IDBPDatabase<ChatDB>)
+  }
+  return openDB<ChatDB>('chat-demo', DB_VERSION, {
     upgrade(db, _oldVersion, _newVersion, tx) {
       // 初始化当前格式需要的存储与索引，不迁移旧消息。
       for (const name of ['sessions', 'files', 'sessionsStaging', 'filesStaging'] as const) {
@@ -69,7 +100,16 @@ const getDB = () =>
         summaries.createIndex('fileIds', 'fileIds', { multiEntry: true })
       }
     },
-  }).catch((error: unknown) => {
+  })
+}
+
+// 每个操作拿到连接后立即创建事务；IndexedDB 按创建顺序执行范围重叠的事务，读取总能看到之前发起的写入。
+const getDB = () =>
+  (dbPromise ??= openDatabase().catch((error: unknown) => {
+    if (isStorageDenied(error)) {
+      // 探测通过但实际打开被拒（如无痕模式）：同样退回内存库，避免整页不可用。
+      return createMemoryDB(STORE_NAMES) as unknown as IDBPDatabase<ChatDB>
+    }
     // 打开失败后允许界面重试，避免一直复用已拒绝的 Promise。
     dbPromise = null
     throw error

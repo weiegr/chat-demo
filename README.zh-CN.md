@@ -27,6 +27,14 @@ pnpm build
 
 产物位于 `dist/`，可部署到静态服务器，也可直接打开 `dist/index.html`。直接打开时，浏览器和 API 服务需允许 `file://` 页面的存储与跨域请求。
 
+需要在手机上以文件形式分发时，可以打包成单文件：
+
+```sh
+pnpm build:single
+```
+
+产物是 `dist-single/index.html`（约 4.5 MB），脚本、样式、字体全部内联，不依赖相邻目录。Android 文件管理器用 `content://` 打开时相对路径无法解析，必须用这个单文件版本；`content://` 下 `localStorage`、IndexedDB 是否可用取决于浏览器，不可用时应用会退化为仅在本次会话内保存。
+
 ## 功能
 
 - 多会话、自动标题、重命名与删除；编辑提问、重新生成和切换消息分支。
@@ -45,15 +53,16 @@ API Key 和设置保存在浏览器 localStorage，会话及附件原件保存�
 
 ## 开发
 
-| 命令          | 用途                |
-| ------------- | ------------------- |
-| `pnpm dev`    | 启动开发服务器      |
-| `pnpm build`  | 构建到 `dist/`      |
-| `pnpm type`   | TypeScript 类型检查 |
-| `pnpm lint`   | oxlint 检查         |
-| `pnpm format` | oxfmt 格式化        |
+| 命令                | 用途                     |
+| ------------------- | ------------------------ |
+| `pnpm dev`          | 启动开发服务器           |
+| `pnpm build`        | 构建到 `dist/`           |
+| `pnpm build:single` | 构建单文件到 `dist-single/` |
+| `pnpm type`         | TypeScript 类型检查      |
+| `pnpm lint`         | oxlint 检查              |
+| `pnpm format`       | oxfmt 格式化             |
 
-[rspack.config.ts](rspack.config.ts) 默认连接 `https://api.deepseek.com`。`createConfig({ apiOrigin, devServer })` 支持自定义 API 地址和开发服务器代理。
+[rspack.config.ts](rspack.config.ts) 默认连接 `https://api.deepseek.com`。`createConfig({ apiOrigin, devServer, singleFile })` 支持自定义 API 地址、开发服务器代理和单文件产物。
 
 聊天默认使用 `deepseek-flash`，通过 Anthropic 兼容的 Messages / Files API 通信；语音使用 ASR / TTS 接口。请求使用搜索、链接阅读、标题和 `latest_reminder` 等扩展，接入服务需支持相应能力。附件实际支持的格式以服务端校验为准。
 

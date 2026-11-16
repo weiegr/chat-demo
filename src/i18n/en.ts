@@ -13,6 +13,8 @@ export const en = {
   sessionSaveFailed:
     'Chats or attachments have not been saved locally. Retry before closing this page.',
   sessionDeleteFailed: 'Unable to delete this chat. Please try again.',
+  storageEphemeral:
+    'Local storage is unavailable in this view. Chats will be lost when the page is closed.',
   settings: 'Settings',
   appName: 'API usage demo',
   deleteSessionModalContentTitle: 'Delete chat?',
