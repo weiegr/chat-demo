@@ -2,10 +2,13 @@ import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
-import { IconEditOutline16 } from '../base/icons.js'
+import { IconCloseFill14, IconEditOutline16 } from '../base/icons.js'
 import { editMessage, retryUpload } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
-import type { UserMessage as UserMessageType } from '../../services/chat/types.js'
+import type {
+  FileAttachment,
+  UserMessage as UserMessageType,
+} from '../../services/chat/types.js'
 import { Button } from '../base/Button.js'
 import { IconButton } from '../base/IconButton.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
@@ -41,9 +44,12 @@ export const UserMessage = memo(function UserMessage({
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content)
+  // 编辑时单独维护附件列表，移除只影响这次重新提问
+  const [editFiles, setEditFiles] = useState<FileAttachment[]>(message.files)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isMobile = useIsMobile()
-  const canSend = !busy && (draft.trim() !== '' || message.files.length > 0)
+  const files = editing ? editFiles : message.files
+  const canSend = !busy && (draft.trim() !== '' || files.length > 0)
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current
@@ -54,7 +60,7 @@ export const UserMessage = memo(function UserMessage({
   }, [editing, draft])
 
   const sendEdit = () => {
-    if (canSend && ensureApiKey() && editMessage(sessionId, message.id, draft.trim())) {
+    if (canSend && ensureApiKey() && editMessage(sessionId, message.id, draft.trim(), editFiles)) {
       stopReadAloud()
       setEditing(false)
     }
@@ -62,19 +68,32 @@ export const UserMessage = memo(function UserMessage({
 
   return (
     <div className={clsx(styles.container, isFirst && styles.isFirst)}>
-      {message.files.length > 0 ? (
+      {files.length > 0 ? (
         <div
           className={clsx(
             styles.files,
-            message.files.some((file) => !file.isImage) && styles.filesWithDocuments
+            files.some((file) => !file.isImage) && styles.filesWithDocuments
           )}
         >
-          {message.files.map((file) => (
-            <MessageFile
-              key={file.id}
-              file={file}
-              onRetry={retryUploadId ? () => retryUpload(sessionId, retryUploadId) : null}
-            />
+          {files.map((file) => (
+            <div key={file.id} className={styles.fileSlot}>
+              <MessageFile
+                file={file}
+                onRetry={retryUploadId ? () => retryUpload(sessionId, retryUploadId) : null}
+              />
+              {editing ? (
+                <button
+                  type="button"
+                  className={styles.fileRemove}
+                  aria-label={t('removeAttachment')}
+                  onClick={() =>
+                    setEditFiles((list) => list.filter((item) => item.id !== file.id))
+                  }
+                >
+                  <IconCloseFill14 />
+                </button>
+              ) : null}
+            </div>
           ))}
         </div>
       ) : null}
@@ -123,6 +142,7 @@ export const UserMessage = memo(function UserMessage({
                 disabled={busy}
                 onClick={() => {
                   setDraft(message.content)
+                  setEditFiles(message.files)
                   setEditing(true)
                 }}
               />
