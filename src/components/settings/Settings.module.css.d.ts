@@ -27,6 +27,8 @@ declare const styles: {
   readonly "apiKeyMask": string;
   readonly "divider": string;
   readonly "confirm": string;
+  readonly "systemPromptCell": string;
+  readonly "systemPromptInput": string;
   readonly "cellButton": string;
   readonly "mobileConfirm": string;
   readonly "importConfirm": string;
@@ -35,4 +37,3 @@ declare const styles: {
   readonly "deleteActions": string;
 };
 export = styles;
-

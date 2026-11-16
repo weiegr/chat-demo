@@ -288,6 +288,42 @@
   }
 }
 
+/** 系统提示词：标题占满一行，输入框另起一行 */
+.systemPromptCell {
+  flex-wrap: wrap;
+}
+
+.systemPromptCell .text {
+  flex: 1 0 100%;
+  padding-right: 8px;
+}
+
+.systemPromptInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 74px;
+  padding: 8px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  resize: vertical;
+  caret-color: var(--dsw-alias-brand-text);
+  transition: border-color var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &:focus {
+    border-color: var(--dsw-alias-brand-primary);
+  }
+
+  &::placeholder {
+    color: var(--dsw-alias-label-caption);
+  }
+}
+
 @media not all and (min-width: 768px) {
   .dialog {
     align-self: flex-end;

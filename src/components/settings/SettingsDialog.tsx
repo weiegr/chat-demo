@@ -22,6 +22,7 @@ import {
   isChineseBrowser,
   setLocale,
   setLocation,
+  setSystemPrompt,
   setThemePreference,
   setTtsVoice,
   useSettings,
@@ -100,6 +101,7 @@ const SettingsContent = () => {
               <LocaleSetting />
               <TtsVoiceSetting />
               <LocationSetting />
+              <SystemPromptSetting />
             </>
           ) : (
             <>
@@ -308,6 +310,31 @@ const TtsVoiceSetting = () => {
             { value: 'tide', label: t('settingsTtsVoiceTide') },
           ]}
           onChange={setTtsVoice}
+        />
+      }
+    />
+  )
+}
+
+/** 系统提示词：随每轮对话发给模型的自定义指令，与默认身份提示一起生效 */
+const SystemPromptSetting = () => {
+  const t = useTranslate()
+  const systemPrompt = useSettings((state) => state.systemPrompt)
+  return (
+    <SettingCell
+      label={t('settingsSystemPrompt')}
+      description={t('settingsSystemPromptDescription')}
+      status={null}
+      className={styles.systemPromptCell}
+      action={
+        <textarea
+          aria-label={t('settingsSystemPrompt')}
+          className={styles.systemPromptInput}
+          placeholder={t('settingsSystemPromptPlaceholder')}
+          rows={3}
+          spellCheck={false}
+          value={systemPrompt}
+          onChange={(event) => setSystemPrompt(event.target.value)}
         />
       }
     />
