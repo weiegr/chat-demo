@@ -16,7 +16,8 @@ export const SessionItem = memo(function SessionItem({
 }: {
   session: SessionSummary
   active: boolean
-  onDelete: () => void
+  /** 稳定的回调：条目上千条时，内联闭包会让 memo 失效、每次重渲整张列表 */
+  onDelete: (session: SessionSummary) => void
 }) {
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
@@ -70,7 +71,7 @@ export const SessionItem = memo(function SessionItem({
               label: t('delete'),
               icon: <IconTrashOutline16 />,
               danger: true,
-              onSelect: onDelete,
+              onSelect: () => onDelete(session),
             },
           ]}
         >

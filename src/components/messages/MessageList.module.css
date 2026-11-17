@@ -35,3 +35,13 @@
   margin: 0 auto;
   padding-bottom: 24px;
 }
+
+/*
+ * 长会话：屏幕外的消息跳过布局与绘制，流式追帧时只需重排视口附近的内容。
+ * 记录已渲染过的高度（auto），来回滚动不会因为估算值而跳动；条数少的会话不启用，
+ * 保持 Ctrl+F 能检索到全部正文。
+ */
+.column[data-long='true'] > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}

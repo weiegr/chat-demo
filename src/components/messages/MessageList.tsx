@@ -5,9 +5,13 @@ import {
   getVisibleMessages,
   type MessageVersions,
 } from '../../services/chat/branches.js'
-import { selectMessageVersion } from '../../services/chat/store.js'
-import type { Session } from '../../services/chat/types.js'
+import { selectMessageVersion, useChatStore } from '../../services/chat/store.js'
+import type {
+  AssistantMessage as AssistantMessageType,
+  Session,
+} from '../../services/chat/types.js'
 import { closeSearchPanel } from '../search/searchPanelState.js'
+import type { SelectMessageVersion } from './BranchSwitcher.js'
 import { AssistantMessage } from './AssistantMessage.js'
 import { ScrollToBottomContext } from './scrollContext.js'
 import { UserMessage } from './UserMessage.js'
@@ -32,6 +36,45 @@ import styles from './MessageList.module.css'
 /** 距底部小于该值时视为在底部，流式内容增长时跟随 */
 const STICKY_THRESHOLD = 40
 const EMPTY_VERSIONS: MessageVersions = { ids: [], index: -1 }
+/** 超过该条数后交给浏览器跳过屏幕外消息的布局与绘制 */
+const LONG_LIST_THRESHOLD = 120
+
+/**
+ * 最后一条回复单独订阅草稿槽：流式增量只重渲染这一条，
+ * 历史消息既不重渲染，也不必各自挂一份订阅。
+ */
+const LiveAssistantMessage = ({
+  sessionId,
+  message,
+  isLast,
+  streaming,
+  busy,
+  versions,
+  onSelectVersion,
+}: {
+  sessionId: string
+  message: AssistantMessageType
+  isLast: boolean
+  streaming: boolean
+  busy: boolean
+  versions: MessageVersions
+  onSelectVersion: SelectMessageVersion
+}) => {
+  const draft = useChatStore((state) =>
+    Object.hasOwn(state.draftReplies, sessionId) ? state.draftReplies[sessionId] : undefined
+  )
+  return (
+    <AssistantMessage
+      sessionId={sessionId}
+      message={draft?.id === message.id ? draft : message}
+      isLast={isLast}
+      streaming={streaming}
+      busy={busy}
+      versions={versions}
+      onSelectVersion={onSelectVersion}
+    />
+  )
+}
 
 export const MessageList = ({
   session,
@@ -48,7 +91,7 @@ export const MessageList = ({
   const stickyRef = useRef(true)
   const scrollTopRef = useRef(0)
   const restoreScrollRef = useRef<{ messageId: string; top: number } | null>(null)
-  const messages = getVisibleMessages(session)
+  const messages = useMemo(() => getVisibleMessages(session), [session])
   const [previousVersions, setPreviousVersions] = useState(() =>
     buildMessageVersions(session, new Map())
   )
@@ -145,7 +188,11 @@ export const MessageList = ({
     <ScrollToBottomContext.Provider value={scrollToBottom}>
       <div ref={isMobile ? undefined : scrollRef} className={styles.container}>
         <div ref={isMobile ? scrollRef : undefined} className={styles.scroll}>
-          <div ref={contentRef} className={styles.column}>
+          <div
+            ref={contentRef}
+            className={styles.column}
+            data-long={messages.length > LONG_LIST_THRESHOLD ? 'true' : undefined}
+          >
             {messages.map((message, index) =>
               message.role === 'user' ? (
                 <UserMessage
@@ -159,13 +206,24 @@ export const MessageList = ({
                   versions={versions.get(message.id) ?? EMPTY_VERSIONS}
                   onSelectVersion={selectVersion}
                 />
+              ) : index === lastIndex ? (
+                <LiveAssistantMessage
+                  key={message.id}
+                  sessionId={session.id}
+                  message={message}
+                  isLast
+                  streaming={streaming}
+                  busy={streaming}
+                  versions={versions.get(message.id) ?? EMPTY_VERSIONS}
+                  onSelectVersion={selectVersion}
+                />
               ) : (
                 <AssistantMessage
                   key={message.id}
                   sessionId={session.id}
                   message={message}
-                  isLast={index === lastIndex}
-                  streaming={streaming && index === lastIndex}
+                  isLast={false}
+                  streaming={false}
                   busy={streaming}
                   versions={versions.get(message.id) ?? EMPTY_VERSIONS}
                   onSelectVersion={selectVersion}

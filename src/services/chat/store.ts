@@ -71,6 +71,11 @@ type ChatState = {
   activeId: string | null
   /** 正在生成回复的会话 */
   streaming: Record<string, AbortController>
+  /**
+   * 正在流式输出的回复，按会话 id 存放，暂不写回 session.messages：
+   * 每帧增量只改这一份数据，整段消息数组与列表组件不再跟着重建。
+   */
+  draftReplies: Record<string, AssistantMessage>
 }
 
 export const useChatStore = create<ChatState>(() => ({
@@ -83,6 +88,7 @@ export const useChatStore = create<ChatState>(() => ({
   sessionSaveErrors: {},
   activeId: null,
   streaming: {},
+  draftReplies: {},
 }))
 
 const { getState: get, setState: set } = useChatStore
@@ -167,15 +173,54 @@ const updateSession = (id: string, update: (session: Session) => Session) =>
     }
   })
 
-const updateReply = (sessionId: string, reply: AssistantMessage) =>
-  updateSession(sessionId, (session) => ({
-    ...session,
-    messages: session.messages.map((message) =>
-      message.id === reply.id
-        ? { ...reply, parentId: message.parentId, selectedChildId: message.selectedChildId }
-        : message
-    ),
-  }))
+/** 丢弃某会话的流式草稿；没有草稿时不触发订阅者。 */
+const dropDraft = (sessionId: string) =>
+  set((state) =>
+    Object.hasOwn(state.draftReplies, sessionId)
+      ? {
+          draftReplies: Object.fromEntries(
+            Object.entries(state.draftReplies).filter(([id]) => id !== sessionId)
+          ),
+        }
+      : state
+  )
+
+/** 把回复并入会话消息；消息已不在会话里时保持不变。 */
+const commitReply = (sessionId: string, reply: AssistantMessage) => {
+  updateSession(sessionId, (session) => {
+    let changed = false
+    const messages = session.messages.map((item) => {
+      if (item.id !== reply.id || item.role !== 'assistant') {
+        return item
+      }
+      changed = true
+      return { ...reply, parentId: item.parentId, selectedChildId: item.selectedChildId }
+    })
+    return changed ? { ...session, messages } : session
+  })
+  dropDraft(sessionId)
+}
+
+/**
+ * 流式期间只更新草稿槽：每帧一次调用的路径上不再复制整段消息数组。
+ * 收尾、续写前缀等非流式场景直接落到会话消息里。
+ */
+const updateReply = (sessionId: string, reply: AssistantMessage) => {
+  if (getStreamController(sessionId)) {
+    set((state) => ({ draftReplies: { ...state.draftReplies, [sessionId]: reply } }))
+    return
+  }
+  commitReply(sessionId, reply)
+}
+
+/** 把仍在流式的草稿并入会话（页面隐藏、导出前）；不传 id 时处理全部会话。 */
+export const commitDraftReplies = (sessionId?: string) => {
+  for (const [id, reply] of Object.entries(get().draftReplies)) {
+    if (sessionId === undefined || id === sessionId) {
+      commitReply(id, reply)
+    }
+  }
+}
 
 const persist = (sessionId: string) => {
   const session = getSession(sessionId)
@@ -230,6 +275,8 @@ export const bindChatPersistence = () => {
     }
     for (const [id, flush] of streamFlushes) {
       flush()
+      // 增量还在草稿槽里，先并入会话再落盘，页面隐藏时不会丢已收到的内容。
+      commitDraftReplies(id)
       persist(id)
     }
     for (const id of unsavedSessions) {
@@ -423,6 +470,7 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
       sessionLoadErrors: {},
       sessionSaveErrors: {},
       activeId: null,
+      draftReplies: {},
     })
     return summaries.length
   } finally {
@@ -517,6 +565,9 @@ const removeSessionData = async (id: string): Promise<boolean> => {
       ),
       sessionSaveErrors: Object.fromEntries(
         Object.entries(state.sessionSaveErrors).filter(([key]) => key !== id)
+      ),
+      draftReplies: Object.fromEntries(
+        Object.entries(state.draftReplies).filter(([key]) => key !== id)
       ),
       activeId: state.activeId === id ? null : state.activeId,
     }))
@@ -995,8 +1046,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           ? prepared.prefix.latestReminder
           : createLatestReminder(useSettings.getState())
         reply = { ...reply, latestReminder }
+        // 只进草稿槽，收尾时随整段回复一起落盘；这里再写一次是整段会话的重复克隆。
         updateReply(sessionId, reply)
-        persist(sessionId)
         const messages = toRequestMessages(
           prepared.history,
           prepared.question,
@@ -1091,7 +1142,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     titleRequests.delete(controller)
     streamFlushes.delete(sessionId)
     cancelAnimationFrame(frame)
-    updateReply(sessionId, reply)
+    // 收尾时把草稿一次性并入会话：整段落盘只有这一次。
+    commitReply(sessionId, reply)
     set((state) => ({
       streaming: Object.fromEntries(
         Object.entries(state.streaming).filter(([id]) => id !== sessionId)
