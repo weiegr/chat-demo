@@ -6,9 +6,17 @@ import type { DraftAttachment } from '../../services/chat/drafts.js'
 import { IconCloseFill14, IconRefreshOutline16 } from '../base/icons.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { FileCard } from '../files/FileCard.js'
+import { openImagePreview } from '../messages/imagePreviewState.js'
 import styles from './ChatInput.module.css'
 
 const UPLOADING: UploadTask = { status: 'uploading' }
+
+/** 未发送的附件只有本地原件，点击时临时开一个地址，留出加载时间再释放 */
+const openLocalFile = (file: File) => {
+  const url = URL.createObjectURL(file)
+  window.open(url, '_blank', 'noreferrer')
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
 
 /** 列表只随草稿附件变化更新；每张卡片独立订阅自己的上传状态。 */
 export const DraftAttachments = memo(function DraftAttachments({
@@ -57,12 +65,20 @@ const AttachmentItem = ({
   const retryLabel = t('uploadRetry', { message: error ?? t('uploadFileStatusFailed') })
   // 「上传失败」只显示重试图标，其余原因写在图片上：可重试时在图标下方，不可重试时贴底
   const showReason = failed && error !== undefined && error !== t('uploadFileStatusFailed')
-  return item.previewUrl ? (
+  const previewUrl = item.previewUrl
+  return previewUrl ? (
     <div
       className={clsx(styles.attachment, failed && styles.attachmentFailed)}
       title={error ?? item.file.name}
     >
-      <img src={item.previewUrl} alt={item.file.name} />
+      <button
+        type="button"
+        className={styles.preview}
+        title={item.file.name}
+        onClick={() => openImagePreview(previewUrl, item.file.name)}
+      >
+        <img src={previewUrl} alt={item.file.name} />
+      </button>
       {status === 'uploading' ? <div className={styles.uploading} /> : null}
       {failed && retry ? (
         <Tooltip content={retryLabel}>
@@ -94,6 +110,7 @@ const AttachmentItem = ({
       error={error}
       onRetry={retry}
       onRemove={onRemove}
+      onOpen={() => openLocalFile(item.file)}
     />
   )
 }
