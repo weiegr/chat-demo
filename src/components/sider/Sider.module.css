@@ -1,3 +1,26 @@
+/* 桌面侧边栏的动画外壳：宽度与 .sider 一致，靠负 margin 滑出；收起后只隐藏、不卸载 */
+.shell {
+  flex-shrink: 0;
+  width: 261px;
+  height: 100%;
+  visibility: visible;
+  transition:
+    margin-left 0.24s var(--ds-ease-in-out),
+    opacity 0.24s var(--ds-ease-in-out),
+    visibility 0s linear 0s;
+}
+
+.shellCollapsed {
+  margin-left: -261px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    margin-left 0.24s var(--ds-ease-in-out),
+    opacity 0.24s var(--ds-ease-in-out),
+    visibility 0s linear 0.24s;
+}
+
 .sider {
   display: flex;
   flex-direction: column;
@@ -77,6 +100,26 @@
 .newChatIcon {
   display: flex;
   margin-right: 6px;
+}
+
+/* 悬停时在右侧渐显的快捷键提示 */
+.newChatHint {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
+  opacity: 0;
+  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+  pointer-events: none;
+}
+
+.newChat:hover .newChatHint,
+.newChat:focus-visible .newChatHint {
+  opacity: 1;
 }
 
 .listWrap {
@@ -177,6 +220,22 @@
   align-items: center;
   gap: 16px;
   margin: 12px 0 0 16px;
+  opacity: 1;
+  visibility: visible;
+  /* 侧栏滑出后再出现，避免两个按钮压在正在移动的侧栏上 */
+  transition:
+    opacity 0.16s var(--ds-ease-in-out) 0.1s,
+    visibility 0s linear 0.1s;
+}
+
+/* 展开时与侧栏同步淡出，滑入完成时刚好隐藏 */
+.collapsedHidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.16s var(--ds-ease-in-out) 0.08s,
+    visibility 0s linear 0.24s;
 }
 
 .collapsedGroup {
@@ -243,5 +302,16 @@
     margin-left: 10px;
     font-size: 16px;
     line-height: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    transition: none;
+  }
+
+  .collapsed,
+  .collapsedHidden {
+    transition: none;
   }
 }

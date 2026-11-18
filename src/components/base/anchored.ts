@@ -129,6 +129,10 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
       return
     }
     const rect = anchor.getBoundingClientRect()
+    // 触发元素被隐藏（display:none 等）时矩形归零，保持上一次的位置，避免浮层飞到左上角
+    if (rect.width === 0 && rect.height === 0) {
+      return
+    }
     const spaceAbove = rect.top - offset - VIEWPORT_PADDING
     const spaceBelow = window.innerHeight - rect.bottom - offset - VIEWPORT_PADDING
 

@@ -32,6 +32,16 @@ button.image {
   cursor: pointer;
 }
 
+/* 图片可点击查看大图 */
+.image.previewImage {
+  cursor: zoom-in;
+}
+
+.previewImage:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+
 .failedIcon {
   display: flex;
   align-items: center;

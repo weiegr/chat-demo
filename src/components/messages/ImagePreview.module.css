@@ -1,0 +1,131 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  /* 顶部留出关闭按钮的位置，图片不会被按钮压住 */
+  padding: 72px 24px 24px;
+  background-color: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(2px);
+  animation: overlayIn var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  animation: imageIn var(--ds-transition-duration) var(--ds-ease-in-out);
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+/* 原图还没解码完时先让位给 loading，避免闪一帧空图 */
+.imageLoading {
+  opacity: 0;
+}
+
+.close {
+  position: absolute;
+  top: max(16px, calc(env(safe-area-inset-top) + 8px));
+  right: max(16px, calc(env(safe-area-inset-right) + 8px));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  color: var(--dsw-static-neutral-bluish-00);
+  background-color: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+
+  &:active {
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--dsw-static-neutral-bluish-00);
+    outline-offset: 2px;
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.spinner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: var(--dsw-static-neutral-bluish-00);
+  animation: spin 0.8s linear infinite;
+}
+
+.failed {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 767px) {
+  .overlay {
+    padding: 64px 12px 12px;
+  }
+
+  .image {
+    border-radius: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .image {
+    animation: none;
+  }
+}
+
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes imageIn {
+  from {
+    transform: scale(0.96);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

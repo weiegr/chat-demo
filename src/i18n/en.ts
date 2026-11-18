@@ -26,6 +26,7 @@ export const en = {
   sessionItemMenuRenameOption: 'Rename',
   more: 'More',
   close: 'Close',
+  imagePreviewFailed: 'Image failed to load',
   sessionHistoryTimelineLabelToday: 'Today',
   sessionHistoryTimelineLabelYesterday: 'Yesterday',
   sessionHistoryTimelineLabel7days: '7 Days',

@@ -15,13 +15,20 @@ export type MenuOption = {
 /** 点击触发，向下展开；点外部或 Esc 关闭 */
 export const Menu = ({
   options,
+  onOpenChange,
   children,
 }: {
   options: MenuOption[]
+  /** 打开状态变化时通知调用方，用于让触发元素在菜单打开期间保持可见 */
+  onOpenChange?: (open: boolean) => void
   children: (props: { open: boolean; toggle: () => void }) => ReactNode
 }) => {
   const [open, setOpen] = useState(false)
-  const close = () => setOpen(false)
+  const changeOpen = (next: boolean) => {
+    setOpen(next)
+    onOpenChange?.(next)
+  }
+  const close = () => changeOpen(false)
   // 左侧对齐并再左移 5px，让菜单文字与触发元素图标对齐
   const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLSpanElement, HTMLDivElement>(
     open,
@@ -32,7 +39,7 @@ export const Menu = ({
   return (
     <>
       <span ref={anchorRef} className={styles.anchor}>
-        {children({ open, toggle: () => setOpen((value) => !value) })}
+        {children({ open, toggle: () => changeOpen(!open) })}
       </span>
       {open
         ? createPortal(
@@ -48,7 +55,7 @@ export const Menu = ({
                   role="menuitem"
                   className={clsx(styles.option, option.danger && styles.danger)}
                   onClick={() => {
-                    setOpen(false)
+                    changeOpen(false)
                     option.onSelect()
                   }}
                 >

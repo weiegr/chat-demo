@@ -21,6 +21,8 @@ export const SessionItem = memo(function SessionItem({
 }) {
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
+  /** 菜单打开期间强制显示「更多」按钮：鼠标移到菜单上时条目失去 hover，按钮一旦隐藏锚点会归零 */
+  const [menuOpen, setMenuOpen] = useState(false)
   const displayTitle = session.title || t('untitledChat')
 
   if (editing) {
@@ -50,7 +52,7 @@ export const SessionItem = memo(function SessionItem({
 
   return (
     <div
-      className={clsx(styles.item, active && styles.active)}
+      className={clsx(styles.item, active && styles.active, menuOpen && styles.menuOpen)}
       onClick={() => {
         selectSession(session.id)
         closeMobileSider()
@@ -59,6 +61,7 @@ export const SessionItem = memo(function SessionItem({
       <div className={styles.title}>{displayTitle}</div>
       <div className={styles.action} onClick={(event) => event.stopPropagation()}>
         <Menu
+          onOpenChange={setMenuOpen}
           options={[
             {
               key: 'rename',

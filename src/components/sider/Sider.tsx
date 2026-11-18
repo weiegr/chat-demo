@@ -75,6 +75,9 @@ export const Sider = memo(function Sider({ mobile = false }: { mobile?: boolean 
           <NewChatIcon />
         </span>
         {t('newChat')}
+        <span className={styles.newChatHint} aria-hidden="true">
+          Ctrl+J
+        </span>
       </button>
       <div className={styles.listWrap}>
         <div className={styles.list}>

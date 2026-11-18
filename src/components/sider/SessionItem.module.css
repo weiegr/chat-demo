@@ -48,6 +48,11 @@
   margin-left: 4px;
 }
 
+/* 菜单打开后鼠标可能移到菜单上，条目失去 hover 也要保持按钮可见 */
+.menuOpen .action {
+  display: flex;
+}
+
 .renameInput {
   box-sizing: border-box;
   width: 100%;

@@ -5,6 +5,7 @@ import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport
 import {
   bindChatPersistence,
   initChat,
+  newChat,
   retrySaveSessions,
   selectSession,
   useChatStore,
@@ -16,6 +17,8 @@ import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
 import { ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
+import { ImagePreview } from '../components/messages/ImagePreview.js'
+import { closeImagePreview } from '../components/messages/imagePreviewState.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
 import { isEphemeralStorage } from '../services/chat/db.js'
@@ -24,7 +27,8 @@ import { Button } from '../components/base/Button.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
 import { closeMobileSider } from '../components/sider/mobileSiderState.js'
-import { MobileSider, Sider } from '../components/sider/Sider.js'
+import { MobileSider } from '../components/sider/Sider.js'
+import { Sidebar } from '../components/sider/Sidebar.js'
 import styles from './App.module.css'
 
 export const App = () => {
@@ -63,10 +67,37 @@ export const App = () => {
 
   // 搜索结果面板只属于当前会话
   useEffect(closeSearchPanel, [activeId])
+  // 切换会话时收起图片预览
+  useEffect(closeImagePreview, [activeId])
   // 切换会话时停止朗读
   useEffect(stopReadAloud, [activeId])
   // 移动端选中会话、切换布局后收起抽屉
   useEffect(closeMobileSider, [activeId, isMobile])
+
+  // 电脑端 Ctrl+J（macOS 上 ⌘J）开启新对话；有弹窗打开时不抢快捷键
+  useEffect(() => {
+    if (isMobile) {
+      return
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        event.isComposing ||
+        event.altKey ||
+        event.shiftKey ||
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== 'j' ||
+        document.querySelector('[role="dialog"][aria-modal="true"]')
+      ) {
+        return
+      }
+      event.preventDefault()
+      newChat()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isMobile])
 
   useEffect(() => {
     void initChat()
@@ -87,7 +118,7 @@ export const App = () => {
   return (
     <>
       <div ref={frameRef} className={styles.frame}>
-        {isMobile ? <MobileSider /> : siderCollapsed ? null : <Sider />}
+        {isMobile ? <MobileSider /> : <Sidebar collapsed={siderCollapsed} />}
         <main className={styles.main}>
           {saveError ? (
             <div className={styles.saveError} role="alert">
@@ -103,7 +134,7 @@ export const App = () => {
             </div>
           ) : null}
           <div className={styles.content}>
-            {siderCollapsed ? <CollapsedSider /> : null}
+            {isMobile ? null : <CollapsedSider collapsed={siderCollapsed} />}
             {!ready || (activeId !== null && !session) ? (
               <div className={styles.loadingView}>
                 {isMobile ? <MobileHeader /> : null}
@@ -144,6 +175,7 @@ export const App = () => {
         <SearchPanel />
       </div>
       <SettingsDialog />
+      <ImagePreview />
       <Toast />
     </>
   )
