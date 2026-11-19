@@ -10,7 +10,7 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 /** 系统提示词默认值；可在设置中修改或清空（清空后请求不带 system 内容） */
 export const DEFAULT_SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
 
-/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、系统提示词、深度思考与智能搜索开关、侧边栏收起状态 */
+/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、系统提示词、长上下文模式、深度思考与智能搜索开关、侧边栏收起状态 */
 type Settings = {
   apiKey: string | null
   locale: Locale
@@ -18,6 +18,7 @@ type Settings = {
   location: UserLocation | null
   ttsVoice: TtsVoice
   systemPrompt: string
+  longContext: boolean
   thinking: boolean
   search: boolean
   siderCollapsed: boolean
@@ -30,6 +31,7 @@ const KEYS = {
   themePreference: 'chat-demo:theme-preference',
   ttsVoice: 'chat-demo:tts-voice',
   systemPrompt: 'chat-demo:system-prompt',
+  longContext: 'chat-demo:long-context',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   siderCollapsed: 'chat-demo:sider-collapsed',
@@ -102,6 +104,7 @@ export const useSettings = create<Settings>(() => ({
   themePreference: initialThemePreference(),
   ttsVoice: initialTtsVoice(),
   systemPrompt: initialSystemPrompt(),
+  longContext: read(KEYS.longContext) === 'true',
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
@@ -131,6 +134,12 @@ export const setTtsVoice = (ttsVoice: TtsVoice) => {
 export const setSystemPrompt = (systemPrompt: string) => {
   write(KEYS.systemPrompt, systemPrompt)
   useSettings.setState({ systemPrompt })
+}
+
+/** 长上下文模式：用 low 档风控避开扩展模式的单条 32K 限制；默认关闭以保留 high */
+export const setLongContext = (longContext: boolean) => {
+  write(KEYS.longContext, String(longContext))
+  useSettings.setState({ longContext })
 }
 
 export const setApiKey = (apiKey: string | null) => {

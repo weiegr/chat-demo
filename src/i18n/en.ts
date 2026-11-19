@@ -77,6 +77,9 @@ export const en = {
     'The API Key is invalid or has been deleted. Please replace it and try again.',
   replyInsufficientBalance: 'Insufficient account balance. Please top up and try again.',
   replyRateLimited: 'Too many requests. Please try again later.',
+  replyInputTooLong:
+    'This message is about {used} tokens, over the server limit of {max} tokens per message. Shorten it, or split it into several messages and try again.',
+  replyInputTooLongHint: ' You can also turn on "Long-context mode" in Settings and try again.',
   completionServerBusyToast: 'Server busy, please try again later.',
   unknownError: 'Unknown error',
   replyRefused: "Sorry, that's beyond my current scope. Let's talk about something else.",
@@ -100,6 +103,14 @@ export const en = {
   settingsSystemPrompt: 'System prompt',
   settingsSystemPromptDescription: 'System instructions sent with every conversation.',
   settingsSystemPromptPlaceholder: 'Enter a system prompt, leave empty to send none',
+  settingsLongContext: 'Long-context mode',
+  settingsLongContextDescription:
+    'When on, safety_check, server tools, and server-generated titles are omitted so the request stays out of extended mode and a single message (including plain-text attachments) can exceed 32K tokens. Smart search switches to an out-of-band search call injected into the current message (search steps are not shown, links are not fetched, and local fallback titles are used). Keep it off for public deployments.',
+  searchContextPreamble:
+    'The following live results were pre-fetched by a search API for your reference. They are not user input, may be incomplete, and should be used with judgement:',
+  settingsVersion: 'Version {version}',
+  settingsLongContextOff: 'Off (compliance first)',
+  settingsLongContextOn: 'On (long input first)',
   settingsLocation: 'Location',
   settingsLocationProvince: 'Select province/region',
   settingsLocationCity: 'Select city',

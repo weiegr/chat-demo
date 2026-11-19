@@ -9,6 +9,7 @@ import {
   validateFiles,
   type UploadTask,
 } from '../attachments.js'
+import { canInlineTextAttachment } from './inlineFiles.js'
 import type { FileAttachment } from './types.js'
 
 export type DraftAttachment = {
@@ -80,7 +81,18 @@ export const addDraftFiles = (
     }
   })
   updateDraft(sessionId, (draft) => ({ ...draft, attachments: [...draft.attachments, ...added] }))
-  added.forEach((attachment) => upload(attachment, apiKey))
+  // 纯文本附件发送时会本地读取并内联进提问，无需上传到 Files API 占用配额或阻塞发送。
+  added.forEach((attachment) => {
+    if (
+      !canInlineTextAttachment({
+        name: attachment.file.name,
+        size: attachment.file.size,
+        isImage: attachment.isImage,
+      })
+    ) {
+      upload(attachment, apiKey)
+    }
+  })
   return null
 }
 
@@ -95,21 +107,26 @@ export const retryDraftAttachment = (
   }
 }
 
-/** 发送按钮和实际提交共用规则：有内容，且全部附件已上传成功。 */
+/** 发送按钮和实际提交共用规则：有内容，且全部需要上传的附件已上传成功。 */
 export const prepareDraftMessage = (draft: Draft, tasks: Record<string, UploadTask>) => {
   const text = draft.text.trim()
   if (!text && draft.attachments.length === 0) {
     return null
   }
-  const files: (FileAttachment & { serverId: string; blob: Blob })[] = []
+  const files: (FileAttachment & { blob: Blob })[] = []
   for (const attachment of draft.attachments) {
+    const inline = canInlineTextAttachment({
+      name: attachment.file.name,
+      size: attachment.file.size,
+      isImage: attachment.isImage,
+    })
     const task = tasks[attachment.id]
-    if (task?.status !== 'done' || !task.serverId) {
+    if (!inline && (task?.status !== 'done' || !task.serverId)) {
       return null
     }
     files.push({
       id: attachment.id,
-      serverId: task.serverId,
+      serverId: inline ? null : task?.status === 'done' ? task.serverId : null,
       name: attachment.file.name,
       size: attachment.file.size,
       isImage: attachment.isImage,

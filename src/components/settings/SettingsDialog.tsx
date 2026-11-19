@@ -22,6 +22,7 @@ import {
   isChineseBrowser,
   setLocale,
   setLocation,
+  setLongContext,
   setSystemPrompt,
   setThemePreference,
   setTtsVoice,
@@ -45,6 +46,12 @@ export const SettingsDialog = () => {
   const open = useSettingsDialog((state) => state.open)
   return open ? <SettingsContent /> : null
 }
+
+/** 构建时写入 <meta name="application-version">；用来确认当前页面是不是最新构建 */
+const APP_VERSION =
+  typeof document === 'undefined'
+    ? ''
+    : (document.querySelector('meta[name="application-version"]')?.getAttribute('content') ?? '')
 
 const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode }[] = [
   {
@@ -102,6 +109,12 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <LocationSetting />
               <SystemPromptSetting />
+              <LongContextSetting />
+              {APP_VERSION ? (
+                <p className={clsx(styles.description, styles.version)}>
+                  {t('settingsVersion', { version: APP_VERSION })}
+                </p>
+              ) : null}
             </>
           ) : (
             <>
@@ -335,6 +348,30 @@ const SystemPromptSetting = () => {
           spellCheck={false}
           value={systemPrompt}
           onChange={(event) => setSystemPrompt(event.target.value)}
+        />
+      }
+    />
+  )
+}
+
+/** 长上下文模式：用 low 档风控避开扩展模式的单条 32K 限制，默认关闭以保留 high */
+const LongContextSetting = () => {
+  const t = useTranslate()
+  const longContext = useSettings((state) => state.longContext)
+  return (
+    <SettingCell
+      label={t('settingsLongContext')}
+      description={t('settingsLongContextDescription')}
+      status={null}
+      action={
+        <Select
+          ariaLabel={t('settingsLongContext')}
+          value={longContext ? 'on' : 'off'}
+          options={[
+            { value: 'off', label: t('settingsLongContextOff') },
+            { value: 'on', label: t('settingsLongContextOn') },
+          ]}
+          onChange={(value) => setLongContext(value === 'on')}
         />
       }
     />

@@ -1,7 +1,14 @@
 import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage } from '../api/client.js'
-import type { ChatModel, CreateMessageRequest } from '../api/types.js'
+import type {
+  ChatModel,
+  CreateMessageRequest,
+  FileBlockParam,
+  MessageParam,
+  TextBlockParam,
+} from '../api/types.js'
+import { formatSearchContext, searchWeb, toSearchQuery } from '../api/search.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { useSettings } from '../settings.js'
@@ -15,6 +22,7 @@ import {
   prepareDraftMessage,
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
+import { isTextAttachment, loadInlineTexts } from './inlineFiles.js'
 import {
   applyEvent,
   canContinueReply,
@@ -36,22 +44,81 @@ import {
 const MODEL: ChatModel = 'deepseek-flash'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
-/** 安全审核固定开启，所有请求都走扩展模式 */
-const SAFETY_CHECK = { level: 'high' } as const
+/**
+ * 扩展模式（high 风控、服务端工具或服务端标题）会按单条消息限 32768 token；
+ * 长上下文模式省略 safety_check、tools 与 title，只保留接口默认检查，避免请求进入扩展模式。
+ */
+const safetyCheck = (longContext: boolean): CreateMessageRequest['safety_check'] =>
+  longContext ? undefined : { level: 'high' }
+/** 旁路搜索的本轮文本长度上限（含内联附件正文），超过视作文档分析而非网页检索需求 */
+const SEARCH_MAX_CHARS = 4000
+/** 长上下文模式不请求服务端标题时的本地兜底标题字数上限 */
+const LOCAL_TITLE_MAX_CHARS = 24
 /** 服务端判定 file_id 失效后，重新补传并重发的最多次数（不含首次请求） */
 const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
 
-/** 阅读链接始终开启，智能搜索开关控制是否另行声明搜索工具（含边想边搜）。 */
-const serverTools = (search: boolean): CreateMessageRequest['tools'] => {
-  const tools: CreateMessageRequest['tools'] = [
-    { type: 'deepseek_read_url', name: 'deepseek_read_url' },
-  ]
+const LINK_PATTERN = /https?:\/\//i
+
+/**
+ * 阅读链接只在本轮消息含 URL 时声明；没链接时声明它没有作用，还会把请求带进扩展模式。
+ * 智能搜索开关控制是否另行声明搜索工具（含边想边搜）。
+ */
+const serverTools = (
+  search: boolean,
+  hasLink: boolean
+): NonNullable<CreateMessageRequest['tools']> => {
+  const tools: NonNullable<CreateMessageRequest['tools']> = []
+  if (hasLink) {
+    tools.push({ type: 'deepseek_read_url', name: 'deepseek_read_url' })
+  }
   if (search) {
     tools.push({ type: 'deepseek_web_search', name: 'deepseek_web_search' })
   }
   return tools
+}
+
+/** 统计本轮用户消息发往接口的文本总字符数（包含已内联的纯文本附件正文） */
+const getUserTextLength = (message: MessageParam | undefined): number => {
+  if (!message || message.role !== 'user') {
+    return 0
+  }
+  if (typeof message.content === 'string') {
+    return message.content.length
+  }
+  return message.content.reduce(
+    (sum, block) => sum + (block.type === 'text' ? block.text.length : 0),
+    0
+  )
+}
+
+/** 长上下文模式省略服务端 title 时的本地兜底标题：优先取提问正文，无正文时取首个附件名 */
+const buildLocalTitle = (question: UserMessage): string => {
+  const fromContent = question.content.replace(/\s+/g, ' ').trim()
+  const raw = fromContent || question.files[0]?.name.replace(/\.[^.]+$/, '').trim() || ''
+  return Array.from(raw).slice(0, LOCAL_TITLE_MAX_CHARS).join('').trim()
+}
+
+/**
+ * 把旁路检索结果作为本轮提问的第一个文本块注入。
+ * 只改发给接口的副本，不动本地消息，界面上不会出现这段内容。
+ */
+const injectSearchContext = (messages: MessageParam[], context: string): MessageParam[] => {
+  const last = messages.at(-1)
+  if (!last || last.role !== 'user') {
+    return messages
+  }
+  const blocks: (FileBlockParam | TextBlockParam)[] =
+    typeof last.content === 'string'
+      ? last.content
+        ? [{ type: 'text', text: last.content }]
+        : []
+      : [...last.content]
+  return [
+    ...messages.slice(0, -1),
+    { ...last, content: [{ type: 'text', text: context }, ...blocks] },
+  ]
 }
 
 /** 允许自动补标题的请求；手动重命名后取消本轮标题写入，包含主动清空标题的情况。 */
@@ -877,6 +944,11 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   // 服务端判定 file_id 失效时会清掉会话里的 serverId，先用最新消息替换请求快照，
   // 否则快照里仍是旧 id，补传会直接复用它。
   request = refreshRequest(sessionId, request)
+  /** 纯文本附件的正文在本地读出后直接并入提问，不再上传为 document */
+  const pendingBlobs = new Map(
+    (pendingFiles.get(sessionId) ?? []).map((file) => [file.id, file.blob])
+  )
+  const texts = await loadInlineTexts([...request.history, request.question], pendingBlobs)
   const apiKey = useSettings.getState().apiKey ?? ''
   const serverIds = new Map<string, string>()
   // 停止生成立即生效；上传本身不取消（输入框与其他消息可能共用同一任务），完成后照常写回 serverId
@@ -884,12 +956,14 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
     signal.addEventListener('abort', () => reject(signal.reason), { once: true })
   })
   const uploads = Promise.allSettled(
-    request.question.files.map(async (file) => {
-      const serverId = await ensureServerId(apiKey, file)
-      if (serverId) {
-        serverIds.set(file.id, serverId)
-      }
-    })
+    request.question.files
+      .filter((file) => !texts.has(file.id) && !isTextAttachment(file))
+      .map(async (file) => {
+        const serverId = await ensureServerId(apiKey, file)
+        if (serverId) {
+          serverIds.set(file.id, serverId)
+        }
+      })
   )
   void uploads.then(() => {
     if (epoch === historyEpoch) {
@@ -905,7 +979,12 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   const pending = new Map<string, FileAttachment>()
   for (const [user] of getContextRounds(request.history).toReversed()) {
     for (const file of user.files) {
-      if (!file.serverId && !serverIds.has(file.id) && !pending.has(file.id)) {
+      if (
+        !file.serverId &&
+        !serverIds.has(file.id) &&
+        !pending.has(file.id) &&
+        !texts.has(file.id)
+      ) {
         pending.set(file.id, file)
       }
     }
@@ -931,6 +1010,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
     history: request.history.map(resolve),
     question: resolve(request.question),
     prefix: request.prefix,
+    texts,
   }
 }
 
@@ -1048,23 +1128,60 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = { ...reply, latestReminder }
         // 只进草稿槽，收尾时随整段回复一起落盘；这里再写一次是整段会话的重复克隆。
         updateReply(sessionId, reply)
+        const settings = useSettings.getState()
         const messages = toRequestMessages(
           prepared.history,
           prepared.question,
           prepared.prefix,
           initial.thinking ?? false,
-          latestReminder
+          latestReminder,
+          prepared.texts,
+          settings.longContext
         )
+        const safety = safetyCheck(settings.longContext)
+        /**
+         * 长上下文模式下绝不声明服务端工具（deepseek_web_search / deepseek_read_url），
+         * 否则请求会重新进入扩展模式、单条消息受 32768 token 限制。
+         * 搜索改为旁路检索后注入本轮消息；链接同样不声明 read_url。
+         */
+        const useClientSearch = settings.longContext && (initial.search ?? false)
+        const tools = serverTools(
+          !settings.longContext && (initial.search ?? false),
+          !settings.longContext && LINK_PATTERN.test(prepared.question.content)
+        )
+        // title: { enabled: true } 与 safety_check: high、服务端工具同属扩展模式，
+        // 长上下文模式下彻底不发送 title，改为回答完成后用本地兜底标题，避免附件或长正文触发 32K 限制。
+        const askTitle = titleRequests.has(controller) && !settings.longContext
+        let payloadMessages = messages
+        // 长消息（含内联文本附件）视为文档而不是检索需求：拿开头几十个字去搜只会引入噪声，跳过旁路检索。
+        const questionMessage = prepared.prefix ? messages.at(-2) : messages.at(-1)
+        const questionChars = getUserTextLength(questionMessage)
+        if (useClientSearch && !prepared.prefix && questionChars <= SEARCH_MAX_CHARS) {
+          const query = toSearchQuery(prepared.question.content)
+          if (query) {
+            try {
+              const sources = await searchWeb(settings.apiKey ?? '', query, controller.signal, 5)
+              if (sources.length > 0) {
+                payloadMessages = injectSearchContext(messages, formatSearchContext(sources))
+              }
+            } catch (error) {
+              // 检索失败不阻塞本轮：没有检索上下文时照常回答，由模型自行说明
+              if (controller.signal.aborted) {
+                throw error
+              }
+            }
+          }
+        }
         const events = streamMessage(
-          useSettings.getState().apiKey ?? '',
+          settings.apiKey ?? '',
           {
             model: initial.model ?? MODEL,
-            system: useSettings.getState().systemPrompt,
-            messages,
+            system: settings.systemPrompt,
+            messages: payloadMessages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-            safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false),
-            ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
+            ...(safety ? { safety_check: safety } : {}),
+            ...(tools.length > 0 ? { tools } : {}),
+            ...(askTitle ? { title: { enabled: true } } : {}),
           },
           controller.signal
         )
@@ -1089,6 +1206,18 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           } else {
             frame ||= requestAnimationFrame(flush)
           }
+        }
+        if (
+          !askTitle &&
+          titleRequests.has(controller) &&
+          !controller.signal.aborted &&
+          !get().importingHistory
+        ) {
+          const title = buildLocalTitle(prepared.question)
+          if (title) {
+            updateSession(sessionId, (session) => (session.title ? session : { ...session, title }))
+          }
+          titleRequests.delete(controller)
         }
         reply = settleReply(reply, 'done', Date.now())
         break

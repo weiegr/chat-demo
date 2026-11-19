@@ -14,6 +14,7 @@ import type {
   ReplyStatus,
   UserMessage,
 } from './types.js'
+import { isTextAttachment } from './inlineFiles.js'
 
 /**
  * 文件按 Files API 的 file_id（附件的 serverId）引用：图片用 image 块，其余用 document 块。
@@ -201,14 +202,38 @@ const isUsableReply = (message: Message): message is AssistantMessage =>
   !message.blocks.some((block) => block.type === 'text' && block.isTemplate) &&
   getReplyText(message) !== ''
 
-/** 有文件时用内容块数组：先文件后文本，文件按 Files API 的 file_id 引用 */
-const toUserParam = ({ content, files }: UserMessage): MessageParam => {
-  const blocks = toFileBlocks(files)
+/**
+ * 有文件时用内容块数组：先文件后文本，文件按 Files API 的 file_id 引用。
+ * 文本附件已在本地读出正文（texts），不再作为 document 块上传：
+ * 服务端处理文档会走单条 32768 token 的受限通道，长文本附件必然被拦。
+ * strictInline 用于本轮提问：读不到正文时用占位说明代替，绝不退回上传——
+ * 那只会换来同一个 32K 报错，用户看不到真正原因。
+ */
+const toUserParam = (
+  { content, files }: UserMessage,
+  texts?: Map<string, string>,
+  strictInline = false
+): MessageParam => {
+  const isInlined = (file: FileAttachment) =>
+    isTextAttachment(file) && (strictInline || texts?.has(file.id))
+  const blocks = toFileBlocks(files.filter((file) => !isInlined(file)))
+  const inline = files.flatMap((file) => {
+    if (!isInlined(file)) {
+      return []
+    }
+    const text = texts?.get(file.id)
+    return [
+      text === undefined
+        ? `【附件：${file.name}｜正文读取失败，未发送】`
+        : `【附件：${file.name}】\n${text}`,
+    ]
+  })
+  const merged = [...inline, content].filter((part) => part !== '').join('\n\n')
   return blocks.length === 0
-    ? { role: 'user', content }
+    ? { role: 'user', content: merged }
     : {
         role: 'user',
-        content: [...blocks, ...(content ? [{ type: 'text' as const, text: content }] : [])],
+        content: [...blocks, ...(merged ? [{ type: 'text' as const, text: merged }] : [])],
       }
 }
 
@@ -223,7 +248,8 @@ const toUserParam = ({ content, files }: UserMessage): MessageParam => {
 const toAssistantParam = (
   { blocks }: AssistantMessage,
   prefix = false,
-  thinking = false
+  thinking = false,
+  omitServerTools = false
 ): Extract<MessageParam, { role: 'assistant' }> => {
   const content: AssistantBlockParam[] = []
   // 成功阅读的网页靠签名恢复正文；缺少有效签名时，调用与结果都不回传。
@@ -263,6 +289,7 @@ const toAssistantParam = (
       const { type, thinking, signature } = block
       content.push({ type, thinking, signature: signature ?? '' })
     } else if (
+      !omitServerTools &&
       block.type === 'server_tool_use' &&
       block.kind === 'read_link' &&
       !unsignedReadLinks.has(block.id)
@@ -270,6 +297,7 @@ const toAssistantParam = (
       const { type, id, name, input, kind } = block
       content.push({ type, id, name, input, kind })
     } else if (
+      !omitServerTools &&
       block.type === 'web_fetch_tool_result' &&
       block.kind === 'read_link' &&
       !unsignedReadLinks.has(block.tool_use_id)
@@ -305,7 +333,9 @@ export const toRequestMessages = (
   question: UserMessage,
   prefix?: AssistantMessage,
   thinking = prefix?.thinking ?? false,
-  latestReminder?: string
+  latestReminder?: string,
+  texts?: Map<string, string>,
+  omitServerTools = false
 ): MessageParam[] => {
   const messages: MessageParam[] = []
   let previousReminder: string | undefined
@@ -317,17 +347,23 @@ export const toRequestMessages = (
     }
   }
   for (const [user, reply] of getContextRounds(history)) {
-    // 历史提问没有文字、附件也都没有 serverId 时，提问为空，连同回答一起省略。
-    if (!user.content && toFileBlocks(user.files).length === 0) {
+    // 历史提问没有文字、附件也不进请求（没有 serverId 且读不到正文）时，提问为空，连同回答一起省略。
+    const hasInline = user.files.some((file) => texts?.has(file.id))
+    if (!user.content && toFileBlocks(user.files).length === 0 && !hasInline) {
       continue
     }
     appendReminder(reply.latestReminder)
-    messages.push(toUserParam(user), toAssistantParam(reply))
+    // 长上下文模式下历史里的文本附件同样必须内联：遗留消息可能仍带着 serverId，
+    // 一旦作为 document 回传，请求会重新进入单条 32768 token 的受限通道。
+    messages.push(
+      toUserParam(user, texts, omitServerTools),
+      toAssistantParam(reply, false, false, omitServerTools)
+    )
   }
   appendReminder(latestReminder)
-  messages.push(toUserParam(question))
+  messages.push(toUserParam(question, texts, true))
   if (prefix?.prefix) {
-    const assistant = toAssistantParam(prefix, true, thinking)
+    const assistant = toAssistantParam(prefix, true, thinking, omitServerTools)
     // 没有非空白正文或有效思考时直接重发原问题，避免服务端拒绝空 Prefill。
     if (
       assistant.content.some(

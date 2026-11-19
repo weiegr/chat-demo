@@ -3,6 +3,7 @@ import { memo } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { useUploads, type UploadTask } from '../../services/attachments.js'
 import type { DraftAttachment } from '../../services/chat/drafts.js'
+import { canInlineTextAttachment } from '../../services/chat/inlineFiles.js'
 import { IconCloseFill14, IconRefreshOutline16 } from '../base/icons.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { FileCard } from '../files/FileCard.js'
@@ -10,6 +11,7 @@ import { openImagePreview } from '../messages/imagePreviewState.js'
 import styles from './ChatInput.module.css'
 
 const UPLOADING: UploadTask = { status: 'uploading' }
+const INLINE_READY: UploadTask = { status: 'done', serverId: '' }
 
 /** 未发送的附件只有本地原件，点击时临时开一个地址，留出加载时间再释放 */
 const openLocalFile = (file: File) => {
@@ -56,7 +58,12 @@ const AttachmentItem = ({
   onRemove: () => void
 }) => {
   const t = useTranslate()
-  const task = useUploads((state) => state.tasks[item.id] ?? UPLOADING)
+  const inline = canInlineTextAttachment({
+    name: item.file.name,
+    size: item.file.size,
+    isImage: item.isImage,
+  })
+  const task = useUploads((state) => state.tasks[item.id] ?? (inline ? INLINE_READY : UPLOADING))
   const status = task.status
   const error = task.status === 'error' ? t(task.error.key, task.error.params) : undefined
   // 过大、格式不支持等重试无效的失败只提示原因，需删除后再发送

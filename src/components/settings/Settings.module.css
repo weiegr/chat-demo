@@ -476,3 +476,7 @@
     max-width: 100%;
   }
 }
+
+.version {
+  margin: 24px 0 8px;
+}

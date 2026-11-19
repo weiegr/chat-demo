@@ -18,6 +18,7 @@ import {
   validateFiles,
 } from '../../services/attachments.js'
 import { deleteFiles, saveFiles } from '../../services/chat/db.js'
+import { canInlineTextAttachment } from '../../services/chat/inlineFiles.js'
 import { useSettings } from '../../services/settings.js'
 import { createId } from '../../utils/id.js'
 import { showToast } from '../base/toastState.js'
@@ -64,8 +65,9 @@ export const UserMessage = memo(function UserMessage({
   const addedFileIds = useRef<string[]>([])
   const isMobile = useIsMobile()
   const files = editing ? editFiles : message.files
-  // 新加的附件要等上传拿到 serverId 才能发送，与输入框规则一致
-  const uploading = editing && editFiles.some((file) => !file.serverId)
+  // 新加的非纯文本附件要等上传拿到 serverId 才能发送，与输入框规则一致
+  const uploading =
+    editing && editFiles.some((file) => !file.serverId && !canInlineTextAttachment(file))
   const canSend = !busy && !uploading && (draft.trim() !== '' || files.length > 0)
 
   useLayoutEffect(() => {
@@ -125,6 +127,9 @@ export const UserMessage = memo(function UserMessage({
     setEditFiles((list) => [...list, ...added])
     const apiKey = useSettings.getState().apiKey ?? ''
     added.forEach((item, index) => {
+      if (canInlineTextAttachment(item)) {
+        return
+      }
       const picked0 = picked[index]
       void uploadAttachment(apiKey, item.id, picked0, item.name, item.isImage)
         .then((serverId) =>

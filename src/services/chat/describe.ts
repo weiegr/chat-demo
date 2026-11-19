@@ -1,5 +1,6 @@
 import { isTranslationKey, translate } from '../../i18n/index.js'
-import { classifyStatus } from '../api/errors.js'
+import { classifyStatus, getInputTooLongInfo } from '../api/errors.js'
+import { useSettings } from '../settings.js'
 import type { AssistantMessage } from './types.js'
 
 export type Notice = {
@@ -40,8 +41,24 @@ export const describeReply = (reply: AssistantMessage): Notice | null => {
         return { text: translate('replyRateLimited') }
       case 'serverBusy':
         return { text: translate('completionServerBusyToast') }
-      default:
+      default: {
+        // 扩展模式（high 风控或服务端工具）会按单条消息拦超长输入，原文是英文，
+        // 这里换成带具体用量和上限的提示，避免用户以为是自己网络或程序出错。
+        const tooLong = getInputTooLongInfo(message)
+        if (tooLong) {
+          // 已开启长上下文模式仍超限时（联网搜索或消息含链接会留在扩展模式），不再提示去开
+          const hint = useSettings.getState().longContext
+            ? ''
+            : translate('replyInputTooLongHint')
+          return {
+            text: `${translate('replyInputTooLong', {
+              used: tooLong.used.toLocaleString('en-US'),
+              max: tooLong.max.toLocaleString('en-US'),
+            })}${hint}`,
+          }
+        }
         return message ? { text: message } : null
+      }
     }
   }
   const template = getTemplateText(reply)

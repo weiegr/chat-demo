@@ -177,8 +177,10 @@ export type CreateMessageRequest = {
   system: string
   messages: MessageParam[]
   thinking: { type: 'enabled' | 'disabled' }
-  tools: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
-  safety_check: { level: 'high' }
+  /** 空数组等同于未提供工具；长上下文模式直接省略该字段 */
+  tools?: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
+  /** 长上下文模式省略该字段，只保留接口默认检查 */
+  safety_check?: { level: 'low' | 'high' }
   title?: { enabled: boolean }
 }
 

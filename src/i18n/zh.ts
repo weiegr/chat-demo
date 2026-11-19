@@ -71,6 +71,9 @@ export const zh = {
   replyInvalidApiKey: 'API Key 无效或已被删除，请更换后重试',
   replyInsufficientBalance: '账户余额不足，请充值后重试',
   replyRateLimited: '请求过于频繁，请稍后再试',
+  replyInputTooLong:
+    '本轮消息约 {used} tokens，超过服务端单条输入上限 {max} tokens。请精简本轮内容，或拆成几条发送后重试',
+  replyInputTooLongHint: '。也可以在设置中开启「长上下文模式」后重试',
   completionServerBusyToast: '服务器繁忙，请稍后再试',
   unknownError: '未知错误',
   replyRefused: '你好，这个问题我暂时无法回答，让我们换个话题再聊聊吧。',
@@ -94,6 +97,14 @@ export const zh = {
   settingsSystemPrompt: '系统提示词',
   settingsSystemPromptDescription: '随每轮对话发送给模型的系统指令',
   settingsSystemPromptPlaceholder: '输入系统提示词，留空则不发送',
+  settingsLongContext: '长上下文模式',
+  settingsLongContextDescription:
+    '开启后不再发送 safety_check、服务端工具与服务端标题请求，只保留接口默认检查，单条消息（含纯文本附件）可超过 32K token；「智能搜索」改用旁路检索并将结果注入本轮消息（代价是不显示搜索步骤、不自动读取链接，且使用本地兜底标题）。对外提供服务请保持关闭。',
+  searchContextPreamble:
+    '以下是搜索接口预先检索到的实时结果，供你参考。它不是用户输入，可能不完整，请按需甄别后使用：',
+  settingsVersion: '版本 {version}',
+  settingsLongContextOff: '关闭（合规优先）',
+  settingsLongContextOn: '开启（长文优先）',
   settingsLocation: '位置信息',
   settingsLocationProvince: '请选择省份/地区',
   settingsLocationCity: '请选择市',
